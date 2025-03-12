@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="container mx-auto p-4">
+        <!-- Display messages (e.g., success/error messages after login/registration) -->
+        {% if messages %}
+            {% for message in messages %}
+                <div class="mb-4 p-4 bg-green-100 text-green-700 rounded">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <h2 class="text-2xl font-bold mb-4">Get User Location</h2>
+
+        {% if user.is_authenticated %}
+        <button id="getLocationBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+            Get My Location
+        </button>
+        {% else %}
+        <button class="bg-gray-500 text-white px-4 py-2 rounded locked">
+            Login to check location
+        </button>
+        {% endif %}
+
+        <div class="mt-4" id="locationResult">
+            <h2 class="font-semibold">Location Details:</h2>
+            <p>Latitude: <span id="latitudeDisplay">{{ user.location.latitude|default:"Not available" }}</span></p>
+            <p>Longitude: <span id="longitudeDisplay">{{ user.location.longitude|default:"Not available" }}</span></p>
+        </div>
+
+        <div id="locationError" class="mt-4 text-red-600 hidden"></div>
+    </div>
+
+    <script>
+        // Function to get CSRF token from cookies
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.startsWith(name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        const sendUserCoordinates = (coords) => {
+            fetch("/save-location/", {
+                method: "POST",
+                headers: {
+                    'Content-Type': "application/json",
+                    'X-CSRFToken': getCookie("csrftoken")  // Dynamically get CSRF token
+                },
+                body: JSON.stringify({
+                    latitude: coords.latitude,
+                    longitude: coords.longitude,
+                })
+            })
+            .then(response => {
+                if (response.redirected) {
+                    // Redirect to login page if not authenticated
+                    window.location.href = response.url;
+                } else {
+                    return response.json();
+                }
+            })
+            .then(data => {
+                const locationError = document.getElementById("locationError");
+                if (data) {
+                    if (data.status === "success") {
+                        locationError.classList.add("hidden");
+                    } else {
+                        locationError.textContent = data.message;
+                        locationError.classList.remove("hidden");
+                    }
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                const locationError = document.getElementById("locationError");
+                locationError.textContent = "An error occurred while saving the location.";
+                locationError.classList.remove("hidden");
+            });
+        };
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const locationBtn = document.getElementById("getLocationBtn");
+
+            const latitudeDisplay = document.getElementById("latitudeDisplay");
+            const longitudeDisplay = document.getElementById("longitudeDisplay");
+
+            locationBtn.addEventListener("click", function() {
+                if ("geolocation" in navigator) {
+                    navigator.geolocation.getCurrentPosition(
+                        function(position) {
+                            // Update the displayed latitude and longitude
+                            latitudeDisplay.textContent = position.coords.latitude.toFixed(4);
+                            longitudeDisplay.textContent = position.coords.longitude.toFixed(4);
+                            sendUserCoordinates(position.coords);
+                        },
+                        function(error) {
+                            console.error(error);
+                            const locationError = document.getElementById("locationError");
+                            locationError.textContent = "Error retrieving location.";
+                            locationError.classList.remove("hidden");
+                        },
+                        {
+                            enableHighAccuracy: true,
+                            timeout: 5000,
+                            maximumAge: 0
+                        }
+                    );
+                } else {
+                    const locationError = document.getElementById("locationError");
+                    locationError.textContent = "Geolocation is not supported by your browser.";
+                    locationError.classList.remove("hidden");
+                }
+            });
+        });
+    </script>
+{% endblock %}
