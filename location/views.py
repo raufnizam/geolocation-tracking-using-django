@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from .models import Location
 
+from django.contrib.gis.geos import Point
 
 from django.shortcuts import render, redirect
 from django.contrib.auth.forms import UserCreationForm
@@ -35,6 +36,9 @@ def register(request):
         form = UserCreationForm()
     return render(request, 'register.html', {'form': form})
 
+
+
+
 @login_required
 def save_location(request):
     try:
@@ -47,19 +51,20 @@ def save_location(request):
                 'status': "error",
                 'message': "Incomplete location data!"
             }, status=400)
-            
+
+        # Save location using GeoDjango's PointField
+        point = Point(float(longitude), float(latitude))
+
         Location.objects.update_or_create(
             user=request.user,
-            defaults={
-                'latitude': latitude,
-                'longitude': longitude,
-            }
+            defaults={'point': point}
         )
+
         return JsonResponse({
             'status': "success",
             'message': "Location saved successfully!"
         }, status=200)
-    
+
     except json.JSONDecodeError:
         return JsonResponse({
             'status': "error",
